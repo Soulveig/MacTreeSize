@@ -47,7 +47,7 @@ MacTreeSize checks `https://mactreesize.ru/update/update.json` for updates. If `
 
 ## License
 
-All rights reserved. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).
 
 ## Full Disk Access
 
