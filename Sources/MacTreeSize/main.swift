@@ -1642,12 +1642,21 @@ extension NumberFormatter {
 
 struct AppInfo {
     static let name = "MacTreeSize"
-    static let version = "0.5.38"
+    static let version = "0.5.39"
     static let versionDisplay = "v\(version)"
     static let updateManifestURLString = "https://mactreesize.ru/update/"
     static let copyright = "Copyright © 2026 Golovatyuk Alexey"
 
     static let changelog = [
+        ReleaseNote(
+            version: "0.5.39",
+            date: "2026-06-22",
+            items: [
+                "Combined update checking and changelog into one Updates window.",
+                "Removed release notes from the Updates window because the changelog already shows the release history.",
+                "Made the Updates window compact so it no longer leaves large empty top or bottom gaps."
+            ]
+        ),
         ReleaseNote(
             version: "0.5.38",
             date: "2026-06-21",
