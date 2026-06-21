@@ -703,25 +703,17 @@ final class AppUpdater: ObservableObject {
         guard isChecking == false, isInstalling == false else { return }
         hasCheckedThisSession = true
 
-        guard let manifestURL = Self.manifestURL else {
-            latestRelease = nil
-            updateAvailable = false
-            title = "Update feed is not configured"
-            message = "Add an HTTPS update manifest URL to MTUpdateManifestURL in Info.plist or the UpdateManifestURL user default."
-            statusIconName = "exclamationmark.triangle"
-            statusColor = .orange
-            return
-        }
+        let releaseURL = Self.releaseURL
 
         isChecking = true
         title = "Checking for updates..."
-        message = manifestURL.absoluteString
+        message = releaseURL.absoluteString
         statusIconName = "arrow.clockwise"
         statusColor = .secondary
 
         Task {
             do {
-                var request = URLRequest(url: manifestURL)
+                var request = URLRequest(url: releaseURL)
                 request.timeoutInterval = 15
                 request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
                 request.setValue("\(AppInfo.name)/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
@@ -731,7 +723,7 @@ final class AppUpdater: ObservableObject {
                     throw AppUpdateError.badStatus(httpResponse.statusCode)
                 }
 
-                let release = try Self.decodeRelease(from: data)
+                let release = try JSONDecoder().decode(GitHubReleaseManifest.self, from: data).release()
                 let isNewer = Self.compareVersions(release.version, AppInfo.version) == .orderedDescending
 
                 latestRelease = release
@@ -813,24 +805,13 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    private static var manifestURL: URL? {
-        let defaultValue = UserDefaults.standard.string(forKey: "UpdateManifestURL")
+    private static var releaseURL: URL {
         let bundleValue = Bundle.main.object(forInfoDictionaryKey: "MTUpdateManifestURL") as? String
-        let rawValues = [defaultValue, bundleValue, AppInfo.updateManifestURLString]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-        for rawValue in rawValues where rawValue.isEmpty == false {
-            guard let url = URL(string: rawValue), Self.isPlaceholderUpdateURL(url) == false else {
-                continue
-            }
-
-            return Self.normalizedUpdateURL(url)
-        }
-
-        return nil
+        let rawValue = bundleValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizedGitHubReleaseURL(URL(string: rawValue ?? "") ?? URL(string: AppInfo.updateManifestURLString)!)
     }
 
-    private static func normalizedUpdateURL(_ url: URL) -> URL {
+    private static func normalizedGitHubReleaseURL(_ url: URL) -> URL {
         if url.host == "api.github.com" {
             return url
         }
@@ -842,26 +823,7 @@ final class AppUpdater: ObservableObject {
             }
         }
 
-        if url.pathExtension.isEmpty {
-            return url.appendingPathComponent("update.json")
-        }
-
-        return url
-    }
-
-    private static func isPlaceholderUpdateURL(_ url: URL) -> Bool {
-        guard let host = url.host?.lowercased() else { return false }
-        return host == "example.com" || host.hasSuffix(".example.com")
-    }
-
-    private static func decodeRelease(from data: Data) throws -> AppUpdateRelease {
-        let decoder = JSONDecoder()
-        if let manifest = try? decoder.decode(AppUpdateManifest.self, from: data) {
-            return try manifest.release()
-        }
-
-        let githubRelease = try decoder.decode(GitHubReleaseManifest.self, from: data)
-        return try githubRelease.release()
+        return URL(string: AppInfo.updateManifestURLString)!
     }
 
     private static func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
@@ -996,30 +958,12 @@ final class AppUpdater: ObservableObject {
     }
 }
 
-struct AppUpdateManifest: Decodable {
-    let version: String
-    let downloadURL: URL
-    let releaseNotes: String?
-
-    func release() throws -> AppUpdateRelease {
-        guard version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            throw AppUpdateError.invalidManifest
-        }
-
-        return AppUpdateRelease(version: version, downloadURL: downloadURL, releaseNotes: releaseNotes)
-    }
-}
-
 struct GitHubReleaseManifest: Decodable {
     let tagName: String
-    let name: String?
-    let body: String?
     let assets: [GitHubReleaseAsset]
 
     enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
-        case name
-        case body
         case assets
     }
 
@@ -1037,7 +981,7 @@ struct GitHubReleaseManifest: Decodable {
             throw AppUpdateError.invalidManifest
         }
 
-        return AppUpdateRelease(version: version, downloadURL: asset.browserDownloadURL, releaseNotes: body ?? name)
+        return AppUpdateRelease(version: version, downloadURL: asset.browserDownloadURL)
     }
 }
 
@@ -1054,7 +998,6 @@ struct GitHubReleaseAsset: Decodable {
 struct AppUpdateRelease {
     let version: String
     let downloadURL: URL
-    let releaseNotes: String?
 }
 
 enum AppUpdateError: LocalizedError {
@@ -1724,12 +1667,21 @@ extension NumberFormatter {
 
 struct AppInfo {
     static let name = "MacTreeSize"
-    static let version = "0.5.40"
+    static let version = "0.5.41"
     static let versionDisplay = "v\(version)"
     static let updateManifestURLString = "https://api.github.com/repos/Soulveig/MacTreeSize/releases/latest"
     static let copyright = "Copyright © 2026 Golovatyuk Alexey"
 
     static let changelog = [
+        ReleaseNote(
+            version: "0.5.41",
+            date: "2026-06-22",
+            items: [
+                "Removed the legacy hosted update.json parser from the app.",
+                "Removed release-notes plumbing that is no longer displayed in the Updates window.",
+                "Removed old UpdateManifestURL user-default override handling."
+            ]
+        ),
         ReleaseNote(
             version: "0.5.40",
             date: "2026-06-22",
