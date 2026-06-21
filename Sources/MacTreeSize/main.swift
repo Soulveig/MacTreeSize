@@ -624,7 +624,7 @@ struct UpdatesView: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 520, idealWidth: 520, minHeight: 500)
+        .frame(minWidth: 520, idealWidth: 520, minHeight: 260, alignment: .topLeading)
         .onAppear {
             updater.checkForUpdatesIfNeeded()
         }
