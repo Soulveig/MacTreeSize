@@ -53,11 +53,11 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.5.39</string>
+    <string>0.5.40</string>
     <key>CFBundleVersion</key>
-    <string>53</string>
+    <string>54</string>
     <key>MTUpdateManifestURL</key>
-    <string>https://mactreesize.ru/update/</string>
+    <string>https://api.github.com/repos/Soulveig/MacTreeSize/releases/latest</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Golovatyuk Alexey</string>
     <key>NSDocumentsFolderUsageDescription</key>

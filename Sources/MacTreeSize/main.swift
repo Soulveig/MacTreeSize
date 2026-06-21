@@ -721,13 +721,17 @@ final class AppUpdater: ObservableObject {
 
         Task {
             do {
-                let (data, response) = try await URLSession.shared.data(from: manifestURL)
+                var request = URLRequest(url: manifestURL)
+                request.timeoutInterval = 15
+                request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+                request.setValue("\(AppInfo.name)/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
+
+                let (data, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
                     throw AppUpdateError.badStatus(httpResponse.statusCode)
                 }
 
-                let manifest = try JSONDecoder().decode(AppUpdateManifest.self, from: data)
-                let release = try manifest.release()
+                let release = try Self.decodeRelease(from: data)
                 let isNewer = Self.compareVersions(release.version, AppInfo.version) == .orderedDescending
 
                 latestRelease = release
@@ -812,15 +816,52 @@ final class AppUpdater: ObservableObject {
     private static var manifestURL: URL? {
         let defaultValue = UserDefaults.standard.string(forKey: "UpdateManifestURL")
         let bundleValue = Bundle.main.object(forInfoDictionaryKey: "MTUpdateManifestURL") as? String
-        let rawValue = [defaultValue, bundleValue, AppInfo.updateManifestURLString]
+        let rawValues = [defaultValue, bundleValue, AppInfo.updateManifestURLString]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { $0.isEmpty == false }
 
-        guard let rawValue, let url = URL(string: rawValue) else { return nil }
+        for rawValue in rawValues where rawValue.isEmpty == false {
+            guard let url = URL(string: rawValue), Self.isPlaceholderUpdateURL(url) == false else {
+                continue
+            }
+
+            return Self.normalizedUpdateURL(url)
+        }
+
+        return nil
+    }
+
+    private static func normalizedUpdateURL(_ url: URL) -> URL {
+        if url.host == "api.github.com" {
+            return url
+        }
+
+        if url.host == "github.com" {
+            let components = url.pathComponents.filter { $0 != "/" }
+            if components.count >= 4, components[2] == "releases", components[3] == "latest" {
+                return URL(string: "https://api.github.com/repos/\(components[0])/\(components[1])/releases/latest") ?? url
+            }
+        }
+
         if url.pathExtension.isEmpty {
             return url.appendingPathComponent("update.json")
         }
+
         return url
+    }
+
+    private static func isPlaceholderUpdateURL(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        return host == "example.com" || host.hasSuffix(".example.com")
+    }
+
+    private static func decodeRelease(from data: Data) throws -> AppUpdateRelease {
+        let decoder = JSONDecoder()
+        if let manifest = try? decoder.decode(AppUpdateManifest.self, from: data) {
+            return try manifest.release()
+        }
+
+        let githubRelease = try decoder.decode(GitHubReleaseManifest.self, from: data)
+        return try githubRelease.release()
     }
 
     private static func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
@@ -966,6 +1007,47 @@ struct AppUpdateManifest: Decodable {
         }
 
         return AppUpdateRelease(version: version, downloadURL: downloadURL, releaseNotes: releaseNotes)
+    }
+}
+
+struct GitHubReleaseManifest: Decodable {
+    let tagName: String
+    let name: String?
+    let body: String?
+    let assets: [GitHubReleaseAsset]
+
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case name
+        case body
+        case assets
+    }
+
+    func release() throws -> AppUpdateRelease {
+        let rawVersion = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let version = rawVersion.hasPrefix("v") ? String(rawVersion.dropFirst()) : rawVersion
+        guard version.isEmpty == false else {
+            throw AppUpdateError.invalidManifest
+        }
+
+        let preferredAssetName = "\(AppInfo.name)-\(version).zip"
+        let asset = assets.first { $0.name == preferredAssetName }
+            ?? assets.first { $0.name.hasPrefix("\(AppInfo.name)-") && $0.name.hasSuffix(".zip") }
+        guard let asset else {
+            throw AppUpdateError.invalidManifest
+        }
+
+        return AppUpdateRelease(version: version, downloadURL: asset.browserDownloadURL, releaseNotes: body ?? name)
+    }
+}
+
+struct GitHubReleaseAsset: Decodable {
+    let name: String
+    let browserDownloadURL: URL
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
     }
 }
 
@@ -1642,12 +1724,21 @@ extension NumberFormatter {
 
 struct AppInfo {
     static let name = "MacTreeSize"
-    static let version = "0.5.39"
+    static let version = "0.5.40"
     static let versionDisplay = "v\(version)"
-    static let updateManifestURLString = "https://mactreesize.ru/update/"
+    static let updateManifestURLString = "https://api.github.com/repos/Soulveig/MacTreeSize/releases/latest"
     static let copyright = "Copyright © 2026 Golovatyuk Alexey"
 
     static let changelog = [
+        ReleaseNote(
+            version: "0.5.40",
+            date: "2026-06-22",
+            items: [
+                "Switched automatic update checks to GitHub Releases.",
+                "Kept compatibility with the existing hosted update.json manifest.",
+                "Ignored placeholder example.com update URLs left in older settings."
+            ]
+        ),
         ReleaseNote(
             version: "0.5.39",
             date: "2026-06-22",

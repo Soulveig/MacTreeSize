@@ -2,7 +2,7 @@
 
 MacTreeSize is a small native macOS disk usage viewer inspired by TreeSize.
 
-Current version: 0.5.39
+Current version: 0.5.40
 
 Copyright © 2026 Golovatyuk Alexey
 
@@ -35,13 +35,13 @@ For public distribution without this step, sign with an Apple Developer ID certi
 
 ## Update manifest
 
-MacTreeSize checks `https://mactreesize.ru/update/update.json` for updates. If `MTUpdateManifestURL` points to a folder, the app automatically appends `update.json`.
+MacTreeSize checks the latest GitHub Release at `https://api.github.com/repos/Soulveig/MacTreeSize/releases/latest` for updates. It also remains compatible with the older hosted `update.json` format. If `MTUpdateManifestURL` points to a folder, the app automatically appends `update.json`.
 
 ```json
 {
-  "version": "0.5.39",
-  "downloadURL": "https://mactreesize.ru/update/MacTreeSize-0.5.39.zip",
-  "releaseNotes": "Combines update checking and changelog into one compact Updates window."
+  "version": "0.5.40",
+  "downloadURL": "https://github.com/Soulveig/MacTreeSize/releases/download/v0.5.40/MacTreeSize-0.5.40.zip",
+  "releaseNotes": "Switches automatic update checks to GitHub Releases."
 }
 ```
 
