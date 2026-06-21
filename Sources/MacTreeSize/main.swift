@@ -5,7 +5,7 @@ import Darwin
 @main
 struct MacTreeSizeApp: App {
     @StateObject private var scanner = DiskScanner()
-    @State private var showsChangelog = false
+    @State private var showsUpdates = false
     @State private var showsAbout = false
     @AppStorage("AppLanguage") private var languageCode = AppLanguage.english.rawValue
 
@@ -15,7 +15,7 @@ struct MacTreeSizeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(showsChangelog: $showsChangelog, showsAbout: $showsAbout)
+            ContentView(showsUpdates: $showsUpdates, showsAbout: $showsAbout)
                 .environmentObject(scanner)
                 .frame(minWidth: 1080, minHeight: 640)
                 .navigationTitle("\(AppInfo.name) \(AppInfo.versionDisplay)")
@@ -34,12 +34,12 @@ struct MacTreeSizeApp: App {
                     showsAbout = true
                 }
                 Button(L10n.text("changelog", language)) {
-                    showsChangelog = true
+                    showsUpdates = true
                 }
             }
             CommandGroup(after: .help) {
                 Button(L10n.text("changelog", language)) {
-                    showsChangelog = true
+                    showsUpdates = true
                 }
             }
         }
@@ -115,6 +115,7 @@ enum L10n {
         "emptyPrompt": [.english: "Choose a folder, or scan entire disk", .russian: "Выберите папку или просканируйте весь диск", .german: "Ordner wählen oder ganze Festplatte scannen", .french: "Choisissez un dossier ou analysez tout le disque", .spanish: "Elija una carpeta o analice todo el disco", .chinese: "选择文件夹或扫描整个磁盘"],
         "updates": [.english: "Updates", .russian: "Обновления", .german: "Updates", .french: "Mises à jour", .spanish: "Actualizaciones", .chinese: "更新"],
         "currentVersion": [.english: "Current version", .russian: "Текущая версия", .german: "Aktuelle Version", .french: "Version actuelle", .spanish: "Versión actual", .chinese: "当前版本"],
+        "releaseNotes": [.english: "Release Notes", .russian: "Описание релиза", .german: "Versionshinweise", .french: "Notes de version", .spanish: "Notas de la versión", .chinese: "发行说明"],
         "checkNow": [.english: "Check Now", .russian: "Проверить сейчас", .german: "Jetzt prüfen", .french: "Vérifier", .spanish: "Comprobar ahora", .chinese: "立即检查"],
         "checking": [.english: "Checking...", .russian: "Проверка...", .german: "Prüfe...", .french: "Vérification...", .spanish: "Comprobando...", .chinese: "正在检查..."],
         "installUpdate": [.english: "Install Update", .russian: "Установить", .german: "Installieren", .french: "Installer", .spanish: "Instalar", .chinese: "安装更新"],
@@ -162,12 +163,11 @@ final class LanguageMenuPresenter: NSObject {
 
 struct ContentView: View {
     @EnvironmentObject private var scanner: DiskScanner
-    @Binding var showsChangelog: Bool
+    @Binding var showsUpdates: Bool
     @Binding var showsAbout: Bool
     @StateObject private var updater = AppUpdater()
     @State private var minimumPercent = 0.0
     @State private var hideFiles = false
-    @State private var showsUpdates = false
     @State private var expandedPaths = Set<String>()
     @State private var rootPathWasCopied = false
     @AppStorage("AppLanguage") private var languageCode = AppLanguage.english.rawValue
@@ -189,9 +189,6 @@ struct ContentView: View {
             content
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .sheet(isPresented: $showsChangelog) {
-            ChangelogView()
-        }
         .sheet(isPresented: $showsAbout) {
             AboutAppView()
         }
@@ -283,15 +280,6 @@ struct ContentView: View {
     private var toolbarUtilityControls: some View {
         HStack(spacing: 8) {
             updateToolbarButton
-
-            Button {
-                showsChangelog = true
-            } label: {
-                toolbarButtonLabel(L10n.text("changelog", language), systemImage: "list.bullet.rectangle")
-            }
-            .controlSize(.regular)
-            .help(L10n.text("changelog", language))
-            .fixedSize(horizontal: true, vertical: false)
 
             Button {
                 showsAbout = true
@@ -544,64 +532,6 @@ struct ContentView: View {
     }
 }
 
-struct ChangelogView: View {
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage("AppLanguage") private var languageCode = AppLanguage.english.rawValue
-
-    private var language: AppLanguage {
-        AppLanguage(rawValue: languageCode) ?? .english
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L10n.text("changelog", language))
-                        .font(.title2.weight(.semibold))
-                    Text(AppInfo.versionDisplay)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.borderless)
-            }
-            .padding(18)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    ForEach(AppInfo.changelog) { release in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(release.version)
-                                    .font(.headline)
-                                Text(release.date)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            ForEach(release.items, id: \.self) { item in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Text("•")
-                                        .foregroundStyle(.secondary)
-                                    Text(item)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(width: 560, height: 420)
-    }
-}
-
 struct UpdatesView: View {
     @ObservedObject var updater: AppUpdater
     @Environment(\.dismiss) private var dismiss
@@ -613,60 +543,87 @@ struct UpdatesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 12) {
+                Image(systemName: updater.statusIconName)
+                    .font(.system(size: 30))
+                    .foregroundStyle(updater.statusColor)
+                    .frame(width: 40)
+
+                VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.text("updates", language))
-                        .font(.title2.weight(.semibold))
+                        .font(.title2)
+                        .fontWeight(.semibold)
                     Text("\(L10n.text("currentVersion", language)) \(AppInfo.versionDisplay)")
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(updater.title)
+                    .font(.headline)
+                Text(updater.message)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let releaseNotes = updater.latestRelease?.releaseNotes, releaseNotes.isEmpty == false {
+                Divider()
+                Text(L10n.text("releaseNotes", language))
+                    .font(.headline)
+                ScrollView {
+                    Text(releaseNotes)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
                 }
-                .buttonStyle(.borderless)
+                .frame(height: 120)
             }
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: updater.statusIconName)
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(updater.statusColor)
-                        .frame(width: 34)
+            Text(L10n.text("changelog", language))
+                .font(.headline)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(updater.title)
-                            .font(.headline)
-                        Text(updater.message)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(AppInfo.changelog) { release in
+                        VStack(alignment: .leading, spacing: 7) {
+                            HStack(spacing: 8) {
+                                Text(release.version)
+                                    .font(.headline)
+                                Text(release.date)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            ForEach(release.items, id: \.self) { item in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text("•")
+                                        .foregroundStyle(.secondary)
+                                    Text(item)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
                     }
                 }
-
-                if let releaseNotes = updater.latestRelease?.releaseNotes, releaseNotes.isEmpty == false {
-                    Text(releaseNotes)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Spacer()
+            .frame(height: 170)
 
             HStack {
+                Spacer()
+
+                Button(L10n.text("done", language)) {
+                    dismiss()
+                }
+
                 Button {
                     updater.checkForUpdates()
                 } label: {
                     Label(updater.isChecking ? L10n.text("checking", language) : L10n.text("checkNow", language), systemImage: "arrow.clockwise")
                 }
-                .disabled(updater.isChecking)
-
-                Spacer()
+                .disabled(updater.isChecking || updater.isInstalling)
 
                 if updater.updateAvailable {
                     Button {
@@ -677,15 +634,10 @@ struct UpdatesView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(updater.isInstalling)
                 }
-
-                Button(L10n.text("done", language)) {
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
-        .frame(width: 520, height: 300)
+        .frame(minWidth: 520, idealWidth: 520, minHeight: 500)
         .onAppear {
             updater.checkForUpdatesIfNeeded()
         }
