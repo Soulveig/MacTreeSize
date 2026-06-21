@@ -115,7 +115,6 @@ enum L10n {
         "emptyPrompt": [.english: "Choose a folder, or scan entire disk", .russian: "Выберите папку или просканируйте весь диск", .german: "Ordner wählen oder ganze Festplatte scannen", .french: "Choisissez un dossier ou analysez tout le disque", .spanish: "Elija una carpeta o analice todo el disco", .chinese: "选择文件夹或扫描整个磁盘"],
         "updates": [.english: "Updates", .russian: "Обновления", .german: "Updates", .french: "Mises à jour", .spanish: "Actualizaciones", .chinese: "更新"],
         "currentVersion": [.english: "Current version", .russian: "Текущая версия", .german: "Aktuelle Version", .french: "Version actuelle", .spanish: "Versión actual", .chinese: "当前版本"],
-        "releaseNotes": [.english: "Release Notes", .russian: "Описание релиза", .german: "Versionshinweise", .french: "Notes de version", .spanish: "Notas de la versión", .chinese: "发行说明"],
         "checkNow": [.english: "Check Now", .russian: "Проверить сейчас", .german: "Jetzt prüfen", .french: "Vérifier", .spanish: "Comprobar ahora", .chinese: "立即检查"],
         "checking": [.english: "Checking...", .russian: "Проверка...", .german: "Prüfe...", .french: "Vérification...", .spanish: "Comprobando...", .chinese: "正在检查..."],
         "installUpdate": [.english: "Install Update", .russian: "Установить", .german: "Installieren", .french: "Installer", .spanish: "Instalar", .chinese: "安装更新"],
@@ -565,18 +564,6 @@ struct UpdatesView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let releaseNotes = updater.latestRelease?.releaseNotes, releaseNotes.isEmpty == false {
-                Divider()
-                Text(L10n.text("releaseNotes", language))
-                    .font(.headline)
-                ScrollView {
-                    Text(releaseNotes)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                }
-                .frame(height: 120)
             }
 
             Divider()
