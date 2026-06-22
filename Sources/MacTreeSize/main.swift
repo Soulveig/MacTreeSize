@@ -779,6 +779,7 @@ final class AppUpdater: ObservableObject {
                 try Self.runProcess("/usr/bin/ditto", arguments: ["-x", "-k", archiveURL.path, expandedURL.path])
 
                 let newAppURL = try Self.findAppBundle(in: expandedURL)
+                try Self.validateDownloadedApp(newAppURL, expectedVersion: release.version)
                 let currentAppURL = Bundle.main.bundleURL
                 let installFolder = currentAppURL.deletingLastPathComponent()
                 if let protectedFolderName = Self.protectedUserFolderName(for: currentAppURL) {
@@ -852,7 +853,7 @@ final class AppUpdater: ObservableObject {
     private static func findAppBundle(in folder: URL) throws -> URL {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
-            includingPropertiesForKeys: [.isDirectoryKey],
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles]
         ) else {
             throw AppUpdateError.invalidArchive
@@ -860,11 +861,40 @@ final class AppUpdater: ObservableObject {
 
         for case let url as URL in enumerator {
             if url.pathExtension == "app", url.lastPathComponent == "\(AppInfo.name).app" {
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values?.isDirectory == true, values?.isSymbolicLink != true else {
+                    continue
+                }
                 return url
             }
         }
 
         throw AppUpdateError.invalidArchive
+    }
+
+    private static func validateDownloadedApp(_ appURL: URL, expectedVersion: String) throws {
+        guard let bundle = Bundle(url: appURL),
+              bundle.bundleIdentifier == Bundle.main.bundleIdentifier,
+              bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == expectedVersion else {
+            throw AppUpdateError.invalidSignature("The downloaded app bundle identity or version does not match the expected release.")
+        }
+
+        try runProcess("/usr/bin/codesign", arguments: ["--verify", "--deep", "--strict", "--verbose=2", appURL.path])
+        try runProcess("/usr/sbin/spctl", arguments: ["--assess", "--type", "execute", "--verbose=4", appURL.path])
+
+        let currentSignature = try processOutput("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", Bundle.main.bundleURL.path])
+        let downloadedSignature = try processOutput("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", appURL.path])
+
+        guard let expectedIdentifier = Bundle.main.bundleIdentifier,
+              downloadedSignature.contains("Identifier=\(expectedIdentifier)") else {
+            throw AppUpdateError.invalidSignature("The downloaded app is signed for a different bundle identifier.")
+        }
+
+        if let currentTeamID = signatureValue("TeamIdentifier", in: currentSignature) {
+            guard signatureValue("TeamIdentifier", in: downloadedSignature) == currentTeamID else {
+                throw AppUpdateError.invalidSignature("The downloaded app is signed by a different developer team.")
+            }
+        }
     }
 
     private static func launchInstallHelper(currentAppURL: URL, newAppURL: URL, tempRoot: URL) throws {
@@ -953,6 +983,33 @@ final class AppUpdater: ObservableObject {
         }
     }
 
+    private static func processOutput(_ executable: String, arguments: [String]) throws -> String {
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        try process.run()
+        process.waitUntilExit()
+
+        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let error = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        guard process.terminationStatus == 0 else {
+            throw AppUpdateError.processFailed(executable, Int(process.terminationStatus))
+        }
+        return output + error
+    }
+
+    private static func signatureValue(_ key: String, in output: String) -> String? {
+        output
+            .split(whereSeparator: \.isNewline)
+            .first { $0.hasPrefix("\(key)=") }?
+            .dropFirst(key.count + 1)
+            .description
+    }
+
     private static func shellQuoted(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
@@ -974,9 +1031,7 @@ struct GitHubReleaseManifest: Decodable {
             throw AppUpdateError.invalidManifest
         }
 
-        let preferredAssetName = "\(AppInfo.name)-\(version).zip"
-        let asset = assets.first { $0.name == preferredAssetName }
-            ?? assets.first { $0.name.hasPrefix("\(AppInfo.name)-") && $0.name.hasSuffix(".zip") }
+        let asset = assets.first { $0.name == "\(AppInfo.name)-\(version).zip" }
         guard let asset else {
             throw AppUpdateError.invalidManifest
         }
@@ -1004,6 +1059,7 @@ enum AppUpdateError: LocalizedError {
     case badStatus(Int)
     case invalidManifest
     case invalidArchive
+    case invalidSignature(String)
     case installFolderNotWritable(String)
     case processFailed(String, Int)
 
@@ -1015,6 +1071,8 @@ enum AppUpdateError: LocalizedError {
             return "The update manifest is missing required version information."
         case .invalidArchive:
             return "The downloaded archive does not contain MacTreeSize.app."
+        case .invalidSignature(let reason):
+            return "The downloaded update failed security validation: \(reason)"
         case .installFolderNotWritable(let path):
             return "MacTreeSize cannot replace itself because the install folder is not writable: \(path)."
         case .processFailed(let executable, let code):
@@ -1667,12 +1725,21 @@ extension NumberFormatter {
 
 struct AppInfo {
     static let name = "MacTreeSize"
-    static let version = "0.5.41"
+    static let version = "0.5.42"
     static let versionDisplay = "v\(version)"
     static let updateManifestURLString = "https://api.github.com/repos/Soulveig/MacTreeSize/releases/latest"
     static let copyright = "Copyright © 2026 Golovatyuk Alexey"
 
     static let changelog = [
+        ReleaseNote(
+            version: "0.5.42",
+            date: "2026-06-22",
+            items: [
+                "Added security validation for downloaded updates before installation.",
+                "Require update archives to contain the expected bundle identifier, version, Developer ID team, and a Gatekeeper-accepted app.",
+                "Require GitHub release assets to use the exact MacTreeSize-version zip name."
+            ]
+        ),
         ReleaseNote(
             version: "0.5.41",
             date: "2026-06-22",

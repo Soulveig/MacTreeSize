@@ -2,7 +2,7 @@
 
 MacTreeSize is a small native macOS disk usage viewer inspired by TreeSize.
 
-Current version: 0.5.41
+Current version: 0.5.42
 
 Copyright © 2026 Golovatyuk Alexey
 
